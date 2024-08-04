@@ -1,6 +1,10 @@
 package testutils
 
-import "github.com/securego/gosec/v2"
+import (
+	"os"
+
+	"github.com/securego/gosec/v2"
+)
 
 var (
 	// SampleCodeG101 code snippets for hardcoded credentials
@@ -390,3 +394,13 @@ func main() {
 `}, 1, gosec.NewConfig()},
 	}
 )
+
+func main() {
+	// Write file from SampleCodeG101
+
+	// Create fodler gemini_autofixtest
+	// Create file g101_samples.go
+	// Write the content of SampleCodeG101
+
+	os.MkdirAll("./gemini_autofixtest/g101", os.ModePerm)
+}
