@@ -6,45 +6,53 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	"regexp"
 )
 
 func main() {
-	http.HandleFunc("/bad/", safeFileServer)
+	http.Handle("/bad/", http.StripPrefix("/bad/", http.FileServer(http.Dir("/"))))
 	http.HandleFunc("/", HelloServer)
 	log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), nil))
 }
 
-func safeFileServer(w http.ResponseWriter, r *http.Request) {
-	// Sanitize and validate the URL path
-	cleanPath := filepath.Clean(r.URL.Path)
-	if !strings.HasPrefix(cleanPath, "/bad/") {
+func HelloServer(w http.ResponseWriter, r *http.Request) {
+	// Step 1: Clean the input path
+	cleanPath := filepath.Clean(r.URL.Path[1:])
+
+	// Step 2: Enforce allowed characters (e.g., alphanumeric, hyphens, underscores, slashes)
+	validPathPattern := `^[a-zA-Z0-9_\-/]+$`
+	matched, err := regexp.MatchString(validPathPattern, cleanPath)
+	if err != nil || !matched {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	// Remove the "/bad/" prefix
-	relativePath := strings.TrimPrefix(cleanPath, "/bad/")
-	// Whitelist allowed characters (alphanumeric and some special characters)
-	if !isValidPath(relativePath) {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	// Serve the file
-	fileServer := http.FileServer(http.Dir("/"))
-	http.StripPrefix("/bad/", fileServer).ServeHTTP(w, r)
-}
-
-func isValidPath(path string) bool {
-	for _, char := range path {
-		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '-' || char == '_' || char == '.') {
-			return false
+	// Step 3: Whitelist allowed paths (example: only allow paths under /safe/directory)
+	allowedPaths := []string{"/safe/directory"}
+	isAllowed := false
+	for _, allowedPath := range allowedPaths {
+		if filepath.HasPrefix(cleanPath, allowedPath) {
+			isAllowed = true
+			break
 		}
 	}
-	return true
-}
+	if !isAllowed {
+		http.Error(w, "Path is not allowed", http.StatusForbidden)
+		return
+	}
 
-func HelloServer(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello, %s!", r.URL.Path[1:])
+	// Step 4: Normalize the path and compare it to the safe directory
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		http.Error(w, "Error processing path", http.StatusInternalServerError)
+		return
+	}
+
+	safeDir := "/safe/directory"
+	if !filepath.HasPrefix(absPath, safeDir) {
+		http.Error(w, "Path is not allowed", http.StatusForbidden)
+		return
+	}
+
+	fmt.Fprintf(w, "Hello, %s!", cleanPath)
 }
